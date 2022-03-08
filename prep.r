@@ -163,4 +163,4 @@ for (i in dirs){
   setwd("..")
   }
 setwd("..")
-write(scriptStr, "bashScript")
+write(scriptStr, "bashScript.sh")
