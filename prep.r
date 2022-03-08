@@ -1,4 +1,4 @@
-
+#script
 library('data.table')
 #used for "fread"
 library("liftOver")
@@ -6,6 +6,7 @@ path = getwd()
 setwd("base data")
 
 dataABC = fread("AllPredictions.AvgHiC.ABC0.02.ModelRegions.csv")
+preFilteredGenes = subset(dataABC, dataABC$CellType == "body_of_pancreas-ENCODE")
 #Datenbankoutput der ABC Max Methode
 TFBSs = fread("Human_TF_MotifList_v_1.01.csv")
 getex = fread("GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct")
@@ -22,22 +23,37 @@ for (i in chromosomes){
 setwd(gsub("/hg38/FASTA","", getwd()))
 setwd(gsub("/base data","", getwd()))
 
-prep = function(relevantGenes, relevantTFs, notThisSq, sqName, PSPMname, outputDirName){
+prep = function(relevantGenes, relevantTFs, sqName, PSPMname, sqFilter){
   #requires libraries "data.table" and "liftOver"
   #requires global variables "dataABC", "tfTranscribedInP" and "genome"
   
+  # setwd("input")
   setwd("input")
   genes = fread(relevantGenes, header = FALSE)
   #gene deren sequenzen zu untersuchen sind
-  preFilteredGenes = subset(dataABC,dataABC$TargetGene %in% genes$V1)
-  filteredGenes = subset(preFilteredGenes,preFilteredGenes$CellType == "body_of_pancreas-ENCODE")
-  filteredGenes = subset(filteredGenes, !(filteredGenes$class == notThisSq))
+  filteredGenes = subset(preFilteredGenes,preFilteredGenes$TargetGene %in% genes$V1)
+  whitelist = NULL
+  if (grepl("a", sqFilter)){
+    whitelist = subset(filteredGenes, (filteredGenes$class == "intergenic" | filteredGenes$class == "genic"))
+  }
+  if (grepl("b", sqFilter)){
+    transient = subset(filteredGenes, (filteredGenes$class == "intergenic" | filteredGenes$class == "genic"))
+    for (i in unique(transient$TargetGene)){
+        whitelist = rbind(whitelist, subset(transient, transient$"ABC.Score" == max(subset(transient, transient$TargetGene == i)$"ABC.Score")))
+    }
+  }
+  if (grepl("p", sqFilter)){
+    whitelist = rbind(whitelist, filteredGenes = subset(filteredGenes, filteredGenes$class == "promotor"))
+  }
+
+  # filteredGenes = subset(filteredGenes, !(filteredGenes$class == notThisSq))
 
 
   tfFilterListe = fread(relevantTFs, header = F)
   hgncToCisbp = subset(TFBSs, TFBSs$`HGNC symbol` %in% tfFilterListe$V1)
   hgncToCisbpList = subset(hgncToCisbp, hgncToCisbp$`HGNC symbol` %in% tfTranscribedInP$Description)$"CIS-BP ID"
   
+  # setwd(gsub("/input","", getwd()))
   setwd(gsub("/input","", getwd()))
 
   #conversion script into one file
@@ -47,6 +63,7 @@ prep = function(relevantGenes, relevantTFs, notThisSq, sqName, PSPMname, outputD
   setwd(gsub("base data/PSPMs","", getwd()))
   
   setwd("output")
+  outputDirName = paste(gsub(".gene", "", relevantGenes), gsub(".tf", "", relevantTFs), sqFilter)
   dir.create(outputDirName)
   setwd(outputDirName)
   fileName = PSPMname
@@ -107,8 +124,9 @@ prep = function(relevantGenes, relevantTFs, notThisSq, sqName, PSPMname, outputD
   }
   setwd(gsub(paste("/", outputDirName, sep=""),"", getwd()))
   setwd(gsub("/output","", getwd()))
+  print(outputDirName)
 }
-
+setwd(path)
 setwd("input")
 inputList = list.files()
 geneList = NULL
@@ -127,9 +145,22 @@ for (i in inputList){
 }
 setwd(gsub("/input","", getwd()))
 
+
 for (i in geneList){
   for (j in tfList){
-    prep(i, j, "promotor", gsub(".gene", "", i), gsub(".tf", "", j), paste(gsub(".gene", "", i), gsub(".tf", "", j)))
-    prep(i, j, c("genic", "intergenic"), gsub(".gene", "", i), gsub(".tf", "", j), paste(gsub(".gene", "", i), gsub(".tf", "", j)))
+    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "a")
   }
 }
+setwd("output")
+dirs = list.files()
+scriptStr = NULL
+for (i in dirs){
+  scriptStr = paste(scriptStr, paste('cd "', i, '"\n', sep = ""), sep = "")
+  setwd(paste(i))
+  files = list.files()
+  scriptStr = paste(scriptStr, paste('sea --p "', subset(files, (grepl(".fa", files))), '" --m "', subset(files, (grepl(".meme", files))), '"\n', sep = ""), sep = "")
+  scriptStr = paste(scriptStr, "cd ..\n", sep = "")
+  setwd("..")
+  }
+setwd("..")
+write(scriptStr, "bashScript")
