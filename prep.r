@@ -2,6 +2,7 @@
 library('data.table')
 #used for "fread"
 library("liftOver")
+setwd("Documents/Pankreaspraktikum/script_input_output")
 path = getwd()
 setwd("base data")
 
@@ -23,11 +24,11 @@ for (i in chromosomes){
 setwd(gsub("/hg38/FASTA","", getwd()))
 setwd(gsub("/base data","", getwd()))
 
-prep = function(relevantGenes, relevantTFs, sqName, PSPMname, sqFilter){
+#defines function to create seq files
+prep = function(relevantGenes, relevantTFs, sqName, PSPMname, sqFilter, trimLength){
   #requires libraries "data.table" and "liftOver"
   #requires global variables "dataABC", "tfTranscribedInP" and "genome"
   
-  # setwd("input")
   setwd("input")
   genes = fread(relevantGenes, header = FALSE)
   #gene deren sequenzen zu untersuchen sind
@@ -48,49 +49,23 @@ prep = function(relevantGenes, relevantTFs, sqName, PSPMname, sqFilter){
 
   # filteredGenes = subset(filteredGenes, !(filteredGenes$class == notThisSq))
 
-
-  tfFilterListe = fread(relevantTFs, header = F)
-  hgncToCisbp = subset(TFBSs, TFBSs$`HGNC symbol` %in% tfFilterListe$V1)
-  hgncToCisbpList = subset(hgncToCisbp, hgncToCisbp$`HGNC symbol` %in% tfTranscribedInP$Description)$"CIS-BP ID"
+  # tfFilterListe = fread(relevantTFs, header = F)
+  # if (!(tfFilterListe == "allTFs")){
+  #   hgncToCisbp = subset(TFBSs, TFBSs$`HGNC symbol` %in% tfFilterListe$V1)
+  # }
+  # if (tfFilterListe == "allTFs"){
+  #   hgncToCisbp = TFBSs
+  # }
+  # hgncToCisbpList = subset(hgncToCisbp, hgncToCisbp$`HGNC symbol` %in% tfTranscribedInP$Description)$"CIS-BP ID"
   
   # setwd(gsub("/input","", getwd()))
   setwd(gsub("/input","", getwd()))
 
-  #conversion script into one file
-  setwd("base data/PSPMs")
-  fileList = list.files()
-  fileList = subset(fileList, gsub(".txt","",fileList) %in% hgncToCisbpList)
-  setwd(gsub("base data/PSPMs","", getwd()))
-  
+  #creating target directory
   setwd("output")
   outputDirName = paste(gsub(".gene", "", relevantGenes), gsub(".tf", "", relevantTFs), sqFilter)
   dir.create(outputDirName)
   setwd(outputDirName)
-  fileName = PSPMname
-  write("MEME version 4", file= paste(fileName,".meme", sep=""))
-  write("ALPHABET= ACGT", file= paste(fileName,".meme", sep=""), append =T)
-  
-  for (i in fileList){
-    #TODO: pruefen ob das jeweilige motif die bedingungen von SEA an eine PSPM erfuellt (keine probability = 1, keine summe != 1)
-    setwd(gsub(paste("/", outputDirName, sep=""),"", getwd()))
-    setwd(gsub("/output","",getwd()))
-    setwd("base data/PSPMs")
-    motifName = i
-    motifName = gsub(".txt","", motifName)
-    motif = fread(i)
-    pwm = motif[,2:5]
-    pwmNameless = unname(pwm)
-    identifier = motifName
-    alternateName = subset(hgncToCisbp, hgncToCisbp$`CIS-BP ID` == gsub(".txt","",i))$"HGNC symbol"[1]
-    setwd(gsub("base data/PSPMs","",getwd()))
-    setwd("output")
-    setwd(outputDirName)
-    
-    write(paste("MOTIF", identifier, alternateName, sep=" "), file=paste(fileName, ".meme", sep=""), append=T)
-    write("letter-probability matrix:", file=paste(fileName, ".meme", sep=""), append=T)
-    write.table(pwm,file=paste(fileName, ".meme", sep=""), append= T, col.names= F, row.names = F)
-    write("\n", file=paste(fileName, ".meme", sep=""), append=T)
-  }
 
   #liftover
   
@@ -110,6 +85,11 @@ prep = function(relevantGenes, relevantTFs, sqName, PSPMname, sqFilter){
   for (i in filteredGenes$name){
     start = start(liftedSeqs[[x]])
     end = end(liftedSeqs[[x]])
+    center = floor(mean(c(start, end)))
+    if ((end-center)<trimLength){
+      start = center - trimLength
+      end = center + trimLength
+    }
     startRow = floor(start/80)+1 #+1 wegen floor()
     startPoint = start - startRow*80 +80
     endRow = floor(end/80)+1
@@ -126,6 +106,57 @@ prep = function(relevantGenes, relevantTFs, sqName, PSPMname, sqFilter){
   setwd(gsub("/output","", getwd()))
   print(outputDirName)
 }
+############
+#builds the shared .meme motif files
+setwd("input")
+tfList = list.files()
+setwd("..")
+tfFilterListe = subset(tfList, grepl(".tf", tfList))
+for (i in tfFilterListe){
+  setwd("input")
+  temp = fread(i, header = F)
+  setwd("..")
+  if (!(i == "allTFs.txt")){
+    hgncToCisbp = subset(TFBSs, TFBSs$`HGNC symbol` %in% temp$V1)
+  }
+  if (i == "allTFs.txt"){
+    hgncToCisbp = TFBSs
+  }
+  hgncToCisbpList = subset(hgncToCisbp, hgncToCisbp$`HGNC symbol` %in% tfTranscribedInP$Description)$"CIS-BP ID"
+  setwd("base data/PSPMs")
+  fileList = list.files()
+  fileList = subset(fileList, gsub(".txt","",fileList) %in% hgncToCisbpList)
+  setwd("..")
+  setwd("..")
+  
+  setwd("output")
+  fileName = gsub(".tf", "", i)
+  write("MEME version 4", file= paste(fileName,".meme", sep=""))
+  write("ALPHABET= ACGT", file= paste(fileName,".meme", sep=""), append =T)
+  setwd("..")
+
+  for (j in fileList){
+    #TODO: pruefen ob das jeweilige motif die bedingungen von SEA an eine PSPM erfuellt (keine probability = 1, keine summe != 1)
+    setwd("base data/PSPMs")
+    motifName = j
+    motifName = gsub(".txt","", motifName)
+    motif = fread(j)
+    pwm = motif[,2:5]
+    pwmNameless = unname(pwm)
+    identifier = motifName
+    alternateName = subset(hgncToCisbp, hgncToCisbp$`CIS-BP ID` == gsub(".txt","",j))$"HGNC symbol"[1]
+    setwd(gsub("base data/PSPMs","",getwd()))
+    
+    setwd("output")
+    write(paste("MOTIF", identifier, alternateName, sep=" "), file=paste(fileName, ".meme", sep=""), append=T)
+    write("letter-probability matrix:", file=paste(fileName, ".meme", sep=""), append=T)
+    write.table(pwm,file=paste(fileName, ".meme", sep=""), append= T, col.names= F, row.names = F)
+    write("\n", file=paste(fileName, ".meme", sep=""), append=T)
+    setwd("..")
+  }
+}
+##############################
+#build the directory structure and seq.gene files
 setwd(path)
 setwd("input")
 inputList = list.files()
@@ -145,22 +176,42 @@ for (i in inputList){
 }
 setwd(gsub("/input","", getwd()))
 
-
 for (i in geneList){
   for (j in tfList){
-    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "a")
+    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "pa", 250)
+    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "pb", 250)
+    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "p", 250)
+    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "a", 250)
+    prep(i, j, gsub(".gene", "", i), gsub(".tf", "", j), "b", 250)
   }
 }
+
+##writes the script to run sea for all combinations
 setwd("output")
-dirs = list.files()
+
+library(parallel)
+threads = detectCores() -1 #using 1 thread fewer than available to prevent the computer from freezing up
+dirs = subset(list.files(), !(grepl(".meme", list.files())))
 scriptStr = NULL
 for (i in dirs){
-  scriptStr = paste(scriptStr, paste('cd "', i, '"\n', sep = ""), sep = "")
+  sharedFiles = subset(list.files(), grepl(".meme", list.files()))
+  
   setwd(paste(i))
   files = list.files()
-  scriptStr = paste(scriptStr, paste('sea --p "', subset(files, (grepl(".fa", files))), '" --m "', subset(files, (grepl(".meme", files))), '"\n', sep = ""), sep = "")
-  scriptStr = paste(scriptStr, "cd ..\n", sep = "")
+  scriptStr = paste(scriptStr, 'sea --p "', i, "/", subset(files, (grepl(".fa", files))), '" --m "', subset(files, (grepl(".meme", files))), '"\n', sep = "")
   setwd("..")
-  }
+}
 setwd("..")
-write(scriptStr, "bashScript.sh")
+splitScripts = NULL
+scriptStr = unlist(strsplit(scriptStr, "\n"))
+x = 0
+scriptParts = ceiling(length(scriptStr)/(threads)) 
+write("#!/bin/bash\n", "scriptOfScripts.sh")
+while (x < (threads)){
+  temp = eval(parse(text=paste("scriptStr[",x*scriptParts,":",(x+1)*scriptParts,"]", sep = "")))
+  temp = temp[!is.na(temp)]
+  write("#!/bin/bash", paste("scriptPart", x, ".sh", sep = ""))
+  write(temp, paste("scriptPart", x, ".sh", sep = ""), append = T)
+  write(paste("bash scriptPart", x, ".sh", " & ", sep = ""), "scriptOfScripts.sh", append = T)
+  x = x + 1
+}

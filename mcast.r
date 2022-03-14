@@ -30,8 +30,10 @@ setwd(gsub("/hg38/FASTA","", getwd()))
 setwd(gsub("/base data","", getwd()))
 hg38Annotated = (TxDb.Hsapiens.UCSC.hg38.knownGene)
 #defines function to create seq file
-geneGroup = "A.gene"
-kbRange = 10000
+geneGroup = "alle Gene.gene"
+geneGroup = NULL
+kbRange = 1
+kbRange = NULL
 prepMcast = function(geneGroup, kbRange){
   #requires libraries "data.table" and "liftOver"
   #requires global variables "dataABC", "tfTranscribedInP" and "genome"
@@ -41,36 +43,48 @@ prepMcast = function(geneGroup, kbRange){
   #gene deren sequenzen zu untersuchen sind
 
   setwd(gsub("/input","", getwd()))
-
-  fileName = gsub(".gene", "", genes)
-  fileName = paste(fileName, ".fa", sep="")
+  
+  outputDirName = paste(gsub(".gene", "", geneGroup), kbRange)
+  setwd("output")
+  dir.create(outputDirName)
+  setwd(outputDirName)
+  fileName = paste(outputDirName, ".fa", sep = "")
   ensList = NULL
   for (i in geneListOfGroup$V1){
     temp = mapIds(org.Hs.eg.db, keys = i,column = "ENTREZID", keytype = "SYMBOL")
     ensList = rbind(ensList, temp[[1]])
   }
-  test = select(TxDb.Hsapiens.UCSC.hg38.knownGene, column = "GENEID", keys = ensList, keytype = "GENEID")
-  
+  conversion = select(TxDb.Hsapiens.UCSC.hg38.knownGene, column = "TXSTART", keys = ensList, keytype = "GENEID")
+  uniqueConversion = unique(conversion$GENEID)
+  chromosomeMapping = select(TxDb.Hsapiens.UCSC.hg38.knownGene, columns = "CDSCHROM", keys = ensList, keytype = "GENEID")
+  chromosomeMapping = subset(chromosomeMapping, !is.na(chromosomeMapping$CDSCHROM))
   #script fuer ein sammelfile fuer alle seqs
   x = 1
-  for (i in ensList){
-    temp = subset(hg38Annotated, hg38Annotated$ == i)
-    tss = eval(parse(text = paste("start(",subset(hg38Annotated, hg38Annotated$tx_name == i),"[i))", sep = "")))
-    start = tss - kbLength
-    end = tss + kbLength
+  write("", fileName, append = F)
+  for (i in uniqueConversion){
+    tempChromosomeMapping = unique(chromosomeMapping$GENEID)
+    tempChromosomeMapping = subset(chromosomeMapping, chromosomeMapping$GENEID == i)
+    if (is.na(tempChromosomeMapping[1,2])){
+      write(paste("Warning Gene ID", i, "maps to no chr"), "warning.txt")
+      next
+    }
+    tss = subset(conversion, conversion$GENEID == i)
+    tss = tss[1,2]
+    start = tss - (kbRange * 100)
+    end = tss + (kbRange * 100)
     startRow = floor(start/80)+1 #+1 wegen floor()
     startPoint = start - startRow*80 + 80
     endRow = floor(end/80)+1
     endPoint = end - endRow*80 + 80
-    targetRows = paste(unlist(eval(parse(text = paste("genome$",subset(filteredGenes, filteredGenes$name ==i)$chr,"[",startRow,":",endRow,"]", sep="")))), collapse="")
+    targetRows = paste(unlist(eval(parse(text = paste("genome$", tempChromosomeMapping[1, 2],"[",startRow,":",endRow,"]", sep="")))), collapse="")
     targetSequence = substr(targetRows, startPoint, (nchar(targetRows)-(80-endPoint)))
-    write(paste(">",start," Homo sapiens ", subset(filteredGenes, filteredGenes$name ==i)$chr,", GRCh38.p14", sep=""), file= fileName, append = T)
+    write(paste(">",start," Homo sapiens ", tempChromosomeMapping[1, 2],", GRCh38.p14", sep=""), file= fileName, append = T)
     write(targetSequence, file= fileName, append = T)
     write("", file=fileName, append = T)
     x = x+1
     
   }
-  setwd(gsub(paste("/", outputDirName, sep=""),"", getwd()))
+  setwd("..")
   setwd(gsub("/output","", getwd()))
   print(outputDirName)
 }
@@ -144,18 +158,22 @@ for (i in inputList){
 }
 setwd(gsub("/input","", getwd()))
 regionsList = c(1:10)
+## maximum observed kbRange without "assertion 'offset > 0' failed": 400 --> 0.8 kb seq length
+setwd(path)
 for (i in geneList){
   for (j in regionsList){
-    prepMcast(i, (j*10000))
+    prepMcast(i, (j))
   }
   
 }
 
 ##writes the script to run sea for all combinations
+setwd(path)
 setwd("output")
-
+getwd()
 library(parallel)
 threads = detectCores() -1 #using 1 thread fewer than available to prevent the computer from freezing up
+#careful about RAM usage, each thread used close to 2 GB in testing 
 dirs = subset(list.files(), !(grepl(".meme", list.files())))
 scriptStr = NULL
 for (i in dirs){
@@ -163,10 +181,14 @@ for (i in dirs){
   
   setwd(paste(i))
   files = list.files()
-  scriptStr = paste(scriptStr, 'sea --p "', i, "/", subset(files, (grepl(".fa", files))), '" --m "', subset(files, (grepl(".meme", files))), '"\n', sep = "")
+  scriptStr = paste(scriptStr, 'mcast ','--oc "' , i, ' mcast out" "besonders wichtige TFs.meme" "' , i, "/", i, '.fa"', '\n', sep = "")
   setwd("..")
+  getwd()
 }
 setwd("..")
+getwd()
+setwd("scripts")
+getwd()
 splitScripts = NULL
 scriptStr = unlist(strsplit(scriptStr, "\n"))
 x = 0
@@ -180,4 +202,6 @@ while (x < (threads)){
   write(paste("bash scriptPart", x, ".sh", " & ", sep = ""), "scriptOfScripts.sh", append = T)
   x = x + 1
 }
+setwd("..")
+getwd()
 
