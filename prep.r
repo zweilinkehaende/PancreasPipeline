@@ -5,7 +5,7 @@ library("liftOver")
 setwd("Documents/Pankreaspraktikum/script_input_output")
 path = getwd()
 setwd("base data")
-
+test = fread("Human_TF_MotifList_v_1.01.csv")
 dataABC = fread("AllPredictions.AvgHiC.ABC0.02.ModelRegions.csv")
 preFilteredGenes = subset(dataABC, dataABC$CellType == "body_of_pancreas-ENCODE")
 #Datenbankoutput der ABC Max Methode

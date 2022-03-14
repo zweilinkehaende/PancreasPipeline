@@ -15,6 +15,7 @@ dataABC = fread("AllPredictions.AvgHiC.ABC0.02.ModelRegions.csv")
 preFilteredGenes = subset(dataABC, dataABC$CellType == "body_of_pancreas-ENCODE")
 #Datenbankoutput der ABC Max Methode
 TFBSs = fread("Human_TF_MotifList_v_1.01.csv")
+TFBSs = subset(TFBSs, TFBSs$`Best Motif(s)? (Figure 2A)`== "TRUE")
 getex = fread("GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct")
 tfTPM = subset(getex, getex$Description %in% TFBSs$`HGNC symbol`)
 tfTranscribedInP = subset(tfTPM, tfTPM$Pancreas > 1)
@@ -70,8 +71,8 @@ prepMcast = function(geneGroup, kbRange){
     }
     tss = subset(conversion, conversion$GENEID == i)
     tss = tss[1,2]
-    start = tss - (kbRange * 100)
-    end = tss + (kbRange * 100)
+    start = tss - (kbRange * 10000)
+    end = tss + (kbRange * 10000)
     startRow = floor(start/80)+1 #+1 wegen floor()
     startPoint = start - startRow*80 + 80
     endRow = floor(end/80)+1
@@ -125,8 +126,8 @@ for (i in tfFilterListe){
     motif = fread(j)
     pwm = motif[,2:5]
     pwmNameless = unname(pwm)
-    identifier = motifName
-    alternateName = subset(hgncToCisbp, hgncToCisbp$`CIS-BP ID` == gsub(".txt","",j))$"HGNC symbol"[1]
+    identifier = subset(hgncToCisbp, hgncToCisbp$`CIS-BP ID` == gsub(".txt","",j))$"HGNC symbol"[1]
+    alternateName = motifName
     setwd(gsub("base data/PSPMs","",getwd()))
     
     setwd("output")
@@ -181,7 +182,7 @@ for (i in dirs){
   
   setwd(paste(i))
   files = list.files()
-  scriptStr = paste(scriptStr, 'mcast ','--oc "' , i, ' mcast out" "besonders wichtige TFs.meme" "' , i, "/", i, '.fa"', '\n', sep = "")
+  scriptStr = paste(scriptStr, 'mcast ','--synth --oc "' , i, ' mcast out" "besonders wichtige TFs.meme" "' , i, "/", i, '.fa"', '\n', sep = "")
   setwd("..")
   getwd()
 }
