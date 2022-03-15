@@ -99,7 +99,6 @@ prep = function(relevantGenes, sqFilter, trimBool, trimLength){
   #gene deren sequenzen zu untersuchen sind
   filteredGenes = subset(preFilteredGenes, preFilteredGenes$TargetGene %in% genes$V1)
   whitelist = NULL
-  ##sqFilter funktioniert nicht wie er soll
   if (grepl("a", sqFilter)){
     whitelist = subset(filteredGenes, (filteredGenes$class == "intergenic" | filteredGenes$class == "genic"))
   }
